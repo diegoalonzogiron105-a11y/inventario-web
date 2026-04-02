@@ -10,27 +10,31 @@
     #status { margin-top:20px; font-size:18px; font-weight:bold; }
     .ok { color:green; }
     .error { color:red; }
-    input { padding:8px; font-size:16px; margin-top:10px; }
-    button { padding:8px 16px; font-size:16px; margin-left:5px; }
+    input, button { padding:10px; font-size:16px; margin-top:10px; }
   </style>
 </head>
 <body>
 
 <h2>📦 Escanear Inventario</h2>
+
+<!-- Escaneo por cámara -->
 <div id="reader"></div>
 <p id="status">Esperando escaneo...</p>
-
-<input type="text" id="codigoInput" placeholder="Ingresar código manual">
-<button onclick="enviarCodigoManual()">Registrar manualmente</button>
-
 <audio id="beep">
   <source src="https://actions.google.com/sounds/v1/beeps/beep_short.ogg" type="audio/ogg">
 </audio>
+
+<hr>
+
+<!-- Registro manual desde HTML -->
+<input type="text" id="manualCode" placeholder="Ingresa código manualmente">
+<button onclick="enviarManual()">Registrar Manual</button>
 
 <script>
 let lastScan = "";
 let scanning = true;
 
+// Función al escanear QR / código de barras
 function onScanSuccess(decodedText) {
   if (!scanning) return;
   if (decodedText === lastScan) return;
@@ -38,33 +42,66 @@ function onScanSuccess(decodedText) {
   lastScan = decodedText;
   scanning = false;
 
+  // 🔊 Sonido
   const beep = document.getElementById("beep");
   beep.currentTime = 0;
   beep.play();
 
+  // 📳 Vibración
   if (navigator.vibrate) navigator.vibrate(200);
 
+  // Mostrar en pantalla
   const status = document.getElementById("status");
   status.innerText = "Escaneado: " + decodedText;
   status.className = "ok";
 
+  // Enviar a Apps Script
   google.script.run
     .withSuccessHandler(() => {
-      scanning = true;
-      status.innerText = "Esperando escaneo...";
-      status.className = "";
+      setTimeout(() => {
+        scanning = true;
+        status.innerText = "Esperando escaneo...";
+        status.className = "";
+      }, 1000);
     })
     .registrarDesdeWeb(decodedText);
 }
 
-function onScanError(error) {
-  // ignorar errores de lectura
-}
+// Ignorar errores de lectura
+function onScanError(error) {}
 
-function enviarCodigoManual() {
-  const codigo = document.getElementById("codigoInput").value.trim();
-  if (!codigo) return;
+// Iniciar cámara
+const html5QrCode = new Html5Qrcode("reader");
+html5QrCode.start(
+  { facingMode: "environment" }, // cámara trasera
+  { fps: 10, qrbox: 250 },
+  onScanSuccess,
+  onScanError
+);
+
+// Función para registrar manual desde HTML
+function enviarManual() {
+  const input = document.getElementById("manualCode");
+  const code = input.value.trim();
+  if (!code) {
+    alert("Ingresa un código primero");
+    return;
+  }
 
   google.script.run
     .withSuccessHandler(() => {
-      document.getElement
+      input.value = "";
+      const status = document.getElementById("status");
+      status.innerText = "Código manual registrado: " + code;
+      status.className = "ok";
+      setTimeout(() => {
+        status.innerText = "Esperando escaneo...";
+        status.className = "";
+      }, 1500);
+    })
+    .registrarDesdeWeb(code);
+}
+</script>
+
+</body>
+</html>
