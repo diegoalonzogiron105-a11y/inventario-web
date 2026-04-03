@@ -69,11 +69,11 @@
   <h3>Resultado:</h3>
   <p id="resultado"></p>
 
-  <!-- OCR -->
-  <script src="https://cdn.jsdelivr.net/npm/tesseract.js@4/dist/tesseract.min.js"></script>
+  <!-- OCR (CDN más estable) -->
+  <script src="https://unpkg.com/tesseract.js@4/dist/tesseract.min.js"></script>
 
   <script>
-    let imagenComprimida;
+    let imagenComprimida = null;
 
     // Vista previa + compresión
     document.getElementById('foto').addEventListener('change', function(e) {
@@ -91,7 +91,6 @@
           const canvas = document.createElement('canvas');
           const ctx = canvas.getContext('2d');
 
-          // REDUCIR TAMAÑO (clave para velocidad)
           const maxWidth = 800;
           const scale = maxWidth / img.width;
 
@@ -100,7 +99,6 @@
 
           ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
 
-          // Convertir a imagen comprimida
           imagenComprimida = canvas.toDataURL('image/jpeg', 0.7);
 
           document.getElementById('preview').src = imagenComprimida;
@@ -113,8 +111,8 @@
     function limpiarTexto(texto) {
       return texto
         .toUpperCase()
-        .replace(/[^A-Z0-9]/g, '') // quitar basura
-        .replace(/O/g, '0') // errores comunes
+        .replace(/[^A-Z0-9]/g, '')
+        .replace(/O/g, '0')
         .replace(/I/g, '1');
     }
 
@@ -131,27 +129,19 @@
       progreso.innerText = "⏳ Iniciando OCR...";
 
       try {
-        const worker = Tesseract.createWorker({
-          logger: m => {
-            if (m.progress) {
-              progreso.innerText = "Procesando: " + Math.round(m.progress * 100) + "%";
-            }
-          }
-        });
+        const worker = await Tesseract.createWorker();
 
-        await worker.load();
         await worker.loadLanguage('eng');
         await worker.initialize('eng');
 
-        const { data: { text } } = await worker.recognize(imagenComprimida);
+        const { data } = await worker.recognize(imagenComprimida);
 
-        console.log("Texto crudo:", text);
+        console.log("Texto detectado:", data.text);
 
-        const limpio = limpiarTexto(text);
+        const limpio = limpiarTexto(data.text);
 
         console.log("Texto limpio:", limpio);
 
-        // Buscar VIN
         const vinMatch = limpio.match(/[A-HJ-NPR-Z0-9]{17}/);
 
         if (vinMatch) {
@@ -165,9 +155,9 @@
         await worker.terminate();
 
       } catch (error) {
-        console.error(error);
+        console.error("ERROR REAL:", error);
         resultado.innerText = "⚠️ Error al procesar";
-        progreso.innerText = "";
+        progreso.innerText = "Error técnico (ver consola F12)";
       }
     }
   </script>
