@@ -1,22 +1,176 @@
 <!DOCTYPE html>
-<html>
+<html lang="es">
 <head>
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <script src="https://unpkg.com/html5-qrcode"></script>
+  <meta charset="UTF-8">
+  <title>Captura VIN PRO</title>
+
   <style>
-    body { text-align:center; font-family:Arial; background:#f4f4f4; }
-    h2 { color:#333; }
-    #reader { width:300px; margin:auto; }
-    #status { margin-top:20px; font-size:18px; font-weight:bold; }
-    .ok { color:green; }
-    input, button { padding:10px; font-size:16px; margin-top:10px; }
+    body {
+      font-family: Arial;
+      text-align: center;
+      padding: 20px;
+      background: #f5f5f5;
+    }
+
+    h2 {
+      color: #333;
+    }
+
+    button {
+      padding: 12px 20px;
+      font-size: 16px;
+      background: #007bff;
+      color: white;
+      border: none;
+      border-radius: 6px;
+      cursor: pointer;
+    }
+
+    button:hover {
+      background: #0056b3;
+    }
+
+    img {
+      margin-top: 15px;
+      border-radius: 10px;
+      max-width: 90%;
+    }
+
+    #resultado {
+      margin-top: 20px;
+      font-size: 20px;
+      font-weight: bold;
+      color: green;
+    }
+
+    #progreso {
+      margin-top: 10px;
+      color: #555;
+    }
   </style>
 </head>
+
 <body>
 
-<h2>📦 Escanear Inventario</h2>
+  <h2>📸 Captura VIN (Optimizado)</h2>
 
-<div id="reader"></div>
-<p id="status">Esperando escaneo...</p>
-<audio id="beep">
-  <
+  <input type="file" accept="image/*" capture="environment" id="foto">
+
+  <br><br>
+
+  <img id="preview" src="" alt="Vista previa">
+
+  <br><br>
+
+  <button onclick="procesar()">Procesar VIN</button>
+
+  <div id="progreso"></div>
+
+  <h3>Resultado:</h3>
+  <p id="resultado"></p>
+
+  <!-- OCR -->
+  <script src="https://cdn.jsdelivr.net/npm/tesseract.js@4/dist/tesseract.min.js"></script>
+
+  <script>
+    let imagenComprimida;
+
+    // Vista previa + compresión
+    document.getElementById('foto').addEventListener('change', function(e) {
+      const file = e.target.files[0];
+
+      if (!file) return;
+
+      const reader = new FileReader();
+
+      reader.onload = function(event) {
+        const img = new Image();
+        img.src = event.target.result;
+
+        img.onload = function() {
+          const canvas = document.createElement('canvas');
+          const ctx = canvas.getContext('2d');
+
+          // REDUCIR TAMAÑO (clave para velocidad)
+          const maxWidth = 800;
+          const scale = maxWidth / img.width;
+
+          canvas.width = maxWidth;
+          canvas.height = img.height * scale;
+
+          ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+
+          // Convertir a imagen comprimida
+          imagenComprimida = canvas.toDataURL('image/jpeg', 0.7);
+
+          document.getElementById('preview').src = imagenComprimida;
+        };
+      };
+
+      reader.readAsDataURL(file);
+    });
+
+    function limpiarTexto(texto) {
+      return texto
+        .toUpperCase()
+        .replace(/[^A-Z0-9]/g, '') // quitar basura
+        .replace(/O/g, '0') // errores comunes
+        .replace(/I/g, '1');
+    }
+
+    async function procesar() {
+      if (!imagenComprimida) {
+        alert("Selecciona una imagen");
+        return;
+      }
+
+      const resultado = document.getElementById('resultado');
+      const progreso = document.getElementById('progreso');
+
+      resultado.innerText = "";
+      progreso.innerText = "⏳ Iniciando OCR...";
+
+      try {
+        const worker = Tesseract.createWorker({
+          logger: m => {
+            if (m.progress) {
+              progreso.innerText = "Procesando: " + Math.round(m.progress * 100) + "%";
+            }
+          }
+        });
+
+        await worker.load();
+        await worker.loadLanguage('eng');
+        await worker.initialize('eng');
+
+        const { data: { text } } = await worker.recognize(imagenComprimida);
+
+        console.log("Texto crudo:", text);
+
+        const limpio = limpiarTexto(text);
+
+        console.log("Texto limpio:", limpio);
+
+        // Buscar VIN
+        const vinMatch = limpio.match(/[A-HJ-NPR-Z0-9]{17}/);
+
+        if (vinMatch) {
+          resultado.innerText = "✅ VIN: " + vinMatch[0];
+        } else {
+          resultado.innerText = "❌ No se detectó VIN";
+        }
+
+        progreso.innerText = "✔️ Proceso terminado";
+
+        await worker.terminate();
+
+      } catch (error) {
+        console.error(error);
+        resultado.innerText = "⚠️ Error al procesar";
+        progreso.innerText = "";
+      }
+    }
+  </script>
+
+</body>
+</html>
